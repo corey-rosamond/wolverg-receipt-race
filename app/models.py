@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -28,10 +28,16 @@ class StageExecution(Base):
 
 class Receipt(Base):
     __tablename__ = "receipts"
+    # One terminal receipt per stage execution, enforced in the database rather
+    # than in the caller. Two contenders may both decide to write; the loser's
+    # INSERT is rejected here and it re-reads the winner's row.
+    __table_args__ = (
+        UniqueConstraint("stage_execution_id", name="uq_receipts_stage_execution"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     stage_execution_id: Mapped[int] = mapped_column(
-        ForeignKey("stage_executions.id"), nullable=False, index=True
+        ForeignKey("stage_executions.id"), nullable=False
     )
     # "done" written by the worker, "timeout" written by the watchdog.
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
