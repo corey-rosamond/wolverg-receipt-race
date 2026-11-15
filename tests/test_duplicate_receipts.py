@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import threading
 
+import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from app import receipts
@@ -61,3 +63,17 @@ def test_worker_and_watchdog_write_exactly_one_receipt(
 
     assert failures == [], failures
     assert count_receipts(session_factory, stage_id) == 1
+
+
+def test_database_rejects_a_second_terminal_receipt(
+    session_factory: sessionmaker, stage_id: int
+) -> None:
+    """The invariant does not depend on the write path remembering to check."""
+    with session_factory() as session:
+        session.add(Receipt(stage_execution_id=stage_id, kind="done"))
+        session.commit()
+
+    with pytest.raises(IntegrityError):
+        with session_factory() as session:
+            session.add(Receipt(stage_execution_id=stage_id, kind="timeout"))
+            session.commit()
